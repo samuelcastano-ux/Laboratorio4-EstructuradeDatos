@@ -9,7 +9,7 @@ Para cada cantidad de puntos N se mide:
 
 Genera:
   resultados.csv
-    graficas/rendimiento.png        (tiempos y aceleración frente a fuerza bruta)
+    graficas/rendimiento.png        (tiempo por consulta en escala log-log)
   graficas/construccion.png       (costo de construir y consultas necesarias)
 Ejecutar:  python analisis.py
 """
@@ -138,6 +138,7 @@ def graficar_rendimiento(filas, ruta):
     for ax, (tiempo_qt, tiempo_bf, titulo) in zip(ejes, operaciones):
         ax.loglog(ns, [1000 * f[tiempo_qt] for f in filas], "o-", label="Quadtree")
         ax.loglog(ns, [1000 * f[tiempo_bf] for f in filas], "s-", label="Fuerza bruta")
+        ax.set_xlim(min(ns), max(ns))
         ax.set_title(titulo)
         ax.set_xlabel("Número de puntos N")
         ax.set_ylabel("Tiempo por consulta (ms)")
@@ -171,7 +172,7 @@ def graficar_construccion(filas, ruta):
     if pares_vecino:
         ejes[1].plot([p[0] for p in pares_vecino], [p[1] for p in pares_vecino],
                      "s-", label="vecino más cercano")
-    ejes[1].set_title("Consultas necesarias para que compense construir")
+    ejes[1].set_title("Consultas para amortizar la construcción")
     ejes[1].set_xlabel("Número de puntos N")
     ejes[1].set_ylabel("Consultas")
     ejes[1].set_yscale("log")
