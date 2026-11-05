@@ -1,7 +1,16 @@
 """
-Análisis comparativo Quadtree vs fuerza bruta.
-Mide tiempos de construcción, range search y vecino más cercano para distintos N.
-Genera: graficas/rendimiento.png y resultados.csv
+Análisis de rendimiento: Quadtree 2D contra fuerza bruta.
+
+Para cada cantidad de puntos N se mide:
+  - el tiempo de construir el Quadtree (una sola vez)
+  - el tiempo por consulta de range search (radio 500 m)
+  - el tiempo por consulta de vecino más cercano
+  - cuántas consultas hacen falta para que la construcción valga la pena
+
+Genera:
+  resultados.csv
+    graficas/rendimiento.png        (tiempos y aceleración frente a fuerza bruta)
+  graficas/construccion.png       (costo de construir y consultas necesarias)
 Ejecutar:  python analisis.py
 """
 import csv
@@ -13,38 +22,54 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from Quadtreetree import QuadTree, rango_fuerza_bruta, vecinos_fuerza_bruta
+from Quadtree import QuadTree, rango_fuerza_bruta, vecinos_fuerza_bruta
 
-LADO = 10_000                 # metros (ciudad de 10 km x 10 km)
-RADIO = 500                   # metros
-TAMAÑOS = [100, 250, 500, 1_000, 2_500, 5_000, 10_000, 25_000, 50_000, 100_000]
+LADO = 10000
+RADIO = 500
+TAMANOS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000]
 N_CONSULTAS = 100
-REPETICIONES = 3              # se toma el mejor tiempo (estilo timeit)
-CARPETA = "graficas"
+REPETICIONES = 3       # se guarda el mejor tiempo de las repeticiones
+AQUI = os.path.dirname(os.path.abspath(__file__))
+CARPETA = os.path.join(AQUI, "graficas")
 
 
-def tiempo_medio(func, consultas):
-    """Tiempo medio por consulta, usando la mejor de REPETICIONES pasadas."""
-    mejor = float("inf")
+def tiempo_por_consulta(funcion, consultas):
+    """Segundos por consulta (se usa el mejor de REPETICIONES)."""
+    mejor = None
     for _ in range(REPETICIONES):
-        t0 = time.perf_counter()
-        for q in consultas:
-            func(q)
-        mejor = min(mejor, time.perf_counter() - t0)
+        inicio = time.perf_counter()
+        for c in consultas:
+            funcion(c)
+        duracion = time.perf_counter() - inicio
+        if mejor is None or duracion < mejor:
+            mejor = duracion
     return mejor / len(consultas)
 
 
-def generar(n, semilla):
-    rnd = random.Random(semilla)
-    pts = [(rnd.uniform(0, LADO), rnd.uniform(0, LADO)) for _ in range(n)]
+def generar(n):
+    rnd = random.Random(n)   # misma semilla para cada N: resultados repetibles
+    puntos = [(rnd.uniform(0, LADO), rnd.uniform(0, LADO)) for _ in range(n)]
     consultas = [(rnd.uniform(0, LADO), rnd.uniform(0, LADO)) for _ in range(N_CONSULTAS)]
-    return pts, consultas
+    return puntos, consultas
 
 
-def primer_cruce(tams, t_qt, t_bf):
-    """Menor N desde el cual el Quadtree es más rápido y lo sigue siendo para todo N mayor."""
+def consultas_necesarias(construccion, t_arbol, t_fuerza_bruta):
+    """
+    Cuántas consultas hacen falta para que construir el árbol compense.
+    Costo con árbol:  construccion + q * t_arbol
+    Costo sin árbol:  q * t_fuerza_bruta
+    Se igualan y se despeja q. Si el árbol no es más rápido, devuelve None.
+    """
+    ahorro = t_fuerza_bruta - t_arbol
+    if ahorro <= 0:
+        return None
+    return construccion / ahorro
+
+
+def primer_cruce(tamanos, t_arbol, t_fuerza_bruta):
+    """Menor N desde el que el Quadtree es más rápido y lo sigue siendo para todo N mayor."""
     cruce = None
-    for n, a, b in zip(tams, t_qt, t_bf):
+    for n, a, b in zip(tamanos, t_arbol, t_fuerza_bruta):
         if a < b:
             if cruce is None:
                 cruce = n
@@ -53,82 +78,130 @@ def primer_cruce(tams, t_qt, t_bf):
     return cruce
 
 
-def main():
-    os.makedirs(CARPETA, exist_ok=True)
+def medir():
     filas = []
+    print(f"{'N':>7} {'construir(s)':>13} {'rango QT(ms)':>13} {'rango BF(ms)':>13} "
+          f"{'vecino QT(ms)':>14} {'vecino BF(ms)':>14}")
 
-    print(f"{'N':>8} {'build (s)':>10} {'rango QT':>10} {'rango BF':>10} "
-          f"{'NN QT':>10} {'NN BF':>10}   (tiempos en ms por consulta)")
-    for n in TAMAÑOS:
-        pts, consultas = generar(n, semilla=n)
+    for n in TAMANOS:
+        puntos, consultas = generar(n)
 
-        t0 = time.perf_counter()
-        arbol = QuadTree([(0, LADO), (0, LADO)], capacidad=8)
-        for p in pts:
+        inicio = time.perf_counter()
+        arbol = QuadTree(0, 0, LADO, LADO, capacidad=8)
+        for p in puntos:
             arbol.insertar(p)
-        t_build = time.perf_counter() - t0
+        t_construir = time.perf_counter() - inicio
 
         fila = {
             "n": n,
-            "build_s": t_build,
-            "rango_qt_ms": 1000 * tiempo_medio(lambda q: arbol.rango(q, RADIO), consultas),
-            "rango_bf_ms": 1000 * tiempo_medio(lambda q: rango_fuerza_bruta(pts, q, RADIO), consultas),
-            "nn_qt_ms": 1000 * tiempo_medio(lambda q: arbol.vecinos(q, 1), consultas),
-            "nn_bf_ms": 1000 * tiempo_medio(lambda q: vecinos_fuerza_bruta(pts, q, 1), consultas),
+            "construir_s": t_construir,
+            "rango_qt_s": tiempo_por_consulta(lambda c: arbol.rango(c, RADIO), consultas),
+            "rango_bf_s": tiempo_por_consulta(lambda c: rango_fuerza_bruta(puntos, c, RADIO), consultas),
+            "vecino_qt_s": tiempo_por_consulta(lambda c: arbol.vecinos(c, 1), consultas),
+            "vecino_bf_s": tiempo_por_consulta(lambda c: vecinos_fuerza_bruta(puntos, c, 1), consultas),
         }
+        fila["consultas_rango"] = consultas_necesarias(
+            t_construir, fila["rango_qt_s"], fila["rango_bf_s"])
+        fila["consultas_vecino"] = consultas_necesarias(
+            t_construir, fila["vecino_qt_s"], fila["vecino_bf_s"])
         filas.append(fila)
-        print(f"{n:>8} {t_build:>10.3f} {fila['rango_qt_ms']:>10.4f} {fila['rango_bf_ms']:>10.4f} "
-              f"{fila['nn_qt_ms']:>10.4f} {fila['nn_bf_ms']:>10.4f}")
 
-    # ---- resultados en CSV ----
-    with open("resultados.csv", "w", newline="", encoding="utf-8") as f:
-        escritor = csv.DictWriter(f, fieldnames=list(filas[0].keys()))
-        escritor.writeheader()
-        escritor.writerows(filas)
+        print(f"{n:>7} {t_construir:>13.4f} {1000 * fila['rango_qt_s']:>13.4f} "
+              f"{1000 * fila['rango_bf_s']:>13.4f} {1000 * fila['vecino_qt_s']:>14.4f} "
+              f"{1000 * fila['vecino_bf_s']:>14.4f}")
+    return filas
 
-    tams = [f["n"] for f in filas]
-    rq = [f["rango_qt_ms"] for f in filas]
-    rb = [f["rango_bf_ms"] for f in filas]
-    nq = [f["nn_qt_ms"] for f in filas]
-    nb = [f["nn_bf_ms"] for f in filas]
 
-    cruce_rango = primer_cruce(tams, rq, rb)
-    cruce_nn = primer_cruce(tams, nq, nb)
+def guardar_csv(filas, ruta):
+    with open(ruta, "w", newline="", encoding="utf-8") as f:
+        escritor = csv.writer(f)
+        escritor.writerow(["n", "construir_s", "rango_qt_s", "rango_bf_s",
+                           "vecino_qt_s", "vecino_bf_s",
+                           "consultas_necesarias_rango", "consultas_necesarias_vecino"])
+        for fila in filas:
+            escritor.writerow([
+                fila["n"], fila["construir_s"], fila["rango_qt_s"], fila["rango_bf_s"],
+                fila["vecino_qt_s"], fila["vecino_bf_s"],
+                "" if fila["consultas_rango"] is None else fila["consultas_rango"],
+                "" if fila["consultas_vecino"] is None else fila["consultas_vecino"],
+            ])
 
-    # ---- gráficas ----
-    fig, ejes = plt.subplots(1, 3, figsize=(17, 5))
-    ejes[0].loglog(tams, rq, "o-", label="Quadtree")
-    ejes[0].loglog(tams, rb, "s-", label="Fuerza bruta")
-    ejes[0].set_title("Range search (radio 500 m)")
-    ejes[0].set_xlabel("N puntos"); ejes[0].set_ylabel("ms por consulta")
 
-    ejes[1].loglog(tams, nq, "o-", label="Quadtree")
-    ejes[1].loglog(tams, nb, "s-", label="Fuerza bruta")
-    ejes[1].set_title("Vecino más cercano (k=1)")
-    ejes[1].set_xlabel("N puntos"); ejes[1].set_ylabel("ms por consulta")
+def graficar_rendimiento(filas, ruta):
+    ns = [f["n"] for f in filas]
+    fig, ejes = plt.subplots(1, 2, figsize=(14, 5.5))
 
-    ejes[2].semilogx(tams, [b / a for a, b in zip(rq, rb)], "o-", label="rango")
-    ejes[2].semilogx(tams, [b / a for a, b in zip(nq, nb)], "s-", label="vecino más cercano")
-    ejes[2].axhline(1, color="k", ls="--", lw=1)
-    ejes[2].set_title("Aceleración (fuerza bruta / Quadtree)")
-    ejes[2].set_xlabel("N puntos"); ejes[2].set_ylabel("veces más rápido")
-
-    for ax in ejes:
+    operaciones = (
+        ("rango_qt_s", "rango_bf_s", "Range search (radio 500 m)"),
+        ("vecino_qt_s", "vecino_bf_s", "Vecino más cercano (k = 1)"),
+    )
+    for ax, (tiempo_qt, tiempo_bf, titulo) in zip(ejes, operaciones):
+        ax.loglog(ns, [1000 * f[tiempo_qt] for f in filas], "o-", label="Quadtree")
+        ax.loglog(ns, [1000 * f[tiempo_bf] for f in filas], "s-", label="Fuerza bruta")
+        ax.set_title(titulo)
+        ax.set_xlabel("Número de puntos N")
+        ax.set_ylabel("Tiempo por consulta (ms)")
         ax.grid(True, which="both", alpha=0.3)
         ax.legend()
+
+    fig.suptitle("Tiempo por consulta frente al número de puntos")
     fig.tight_layout()
-    fig.savefig(os.path.join(CARPETA, "rendimiento.png"), dpi=150)
+    fig.savefig(ruta, dpi=150)
     plt.close(fig)
 
-    # ---- discusión ----
+
+def graficar_construccion(filas, ruta):
+    filas_grafica = [f for f in filas if f["n"] <= 10000]
+    ns = [f["n"] for f in filas_grafica]
+    fig, ejes = plt.subplots(1, 2, figsize=(14, 5.5))
+
+    ejes[0].plot(ns, [1000 * f["construir_s"] for f in filas_grafica],
+                 "o-", color="purple")
+    ejes[0].set_title("Costo de construir el Quadtree")
+    ejes[0].set_xlabel("Número de puntos N")
+    ejes[0].set_ylabel("Tiempo de construcción (ms)")
+
+    pares = [(f["n"], f["consultas_rango"]) for f in filas_grafica
+             if f["consultas_rango"] is not None]
+    pares_vecino = [(f["n"], f["consultas_vecino"]) for f in filas_grafica
+                    if f["consultas_vecino"] is not None]
+    if pares:
+        ejes[1].plot([p[0] for p in pares], [p[1] for p in pares], "o-",
+                     label="range search")
+    if pares_vecino:
+        ejes[1].plot([p[0] for p in pares_vecino], [p[1] for p in pares_vecino],
+                     "s-", label="vecino más cercano")
+    ejes[1].set_title("Consultas necesarias para que compense construir")
+    ejes[1].set_xlabel("Número de puntos N")
+    ejes[1].set_ylabel("Consultas")
+    ejes[1].set_yscale("log")
+    ejes[1].legend()
+
+    for ax in ejes:
+        ax.set_xlim(0, 10000)
+        ax.grid(True, alpha=0.3)
+    fig.suptitle("Construcción del Quadtree 2D (N de 0 a 10.000)")
+    fig.tight_layout()
+    fig.savefig(ruta, dpi=150)
+    plt.close(fig)
+
+
+def main():
+    os.makedirs(CARPETA, exist_ok=True)
+    filas = medir()
+
+    guardar_csv(filas, os.path.join(AQUI, "resultados.csv"))
+    graficar_rendimiento(filas, os.path.join(CARPETA, "rendimiento.png"))
+    graficar_construccion(filas, os.path.join(CARPETA, "construccion.png"))
+
+    ns = [f["n"] for f in filas]
     print("\n=== Discusión ===")
-    print(f"Quadtree supera a fuerza bruta en range search desde N = {cruce_rango}")
-    print(f"Quadtree supera a fuerza bruta en vecino más cercano desde N = {cruce_nn}")
-    if rb[-1] > rq[-1]:
-        ahorro = rb[-1] - rq[-1]            # segundos por consulta ahorrados
-        print(f"Para N = {tams[-1]}, el coste de construcción ({filas[-1]['build_s']:.2f} s) "
-              f"se amortiza tras ~{filas[-1]['build_s'] / (ahorro / 1000):.0f} consultas de rango.")
-    print("Los resultados dependen de la máquina; el punto de cruce es lo que interesa comparar.")
+    print("Range search: el Quadtree es más rápido desde N =",
+          primer_cruce(ns, [f["rango_qt_s"] for f in filas], [f["rango_bf_s"] for f in filas]))
+    print("Vecino más cercano: el Quadtree es más rápido desde N =",
+          primer_cruce(ns, [f["vecino_qt_s"] for f in filas], [f["vecino_bf_s"] for f in filas]))
+    print("Los tiempos dependen de la computadora; lo que se compara es la forma de las curvas.")
+    print("Archivos: resultados.csv, graficas/rendimiento.png, graficas/construccion.png")
 
 
 if __name__ == "__main__":
