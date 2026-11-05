@@ -115,3 +115,7 @@ Medidos en la computadora de desarrollo con N desde 10 hasta 100 000 puntos
 
 Con datos muy agrupados o muchos puntos repetidos, el árbol puede hacerse más lento,
 porque algunas hojas se llenan demasiado. `prof_max` limita la profundidad.
+
+## Uso de IA
+
+Se utilizo IA para generar el análisis estadístico de los resultados y gráficas, generar el test, verificar el código creado para el QuadTree y ayudar a redactar este README.
