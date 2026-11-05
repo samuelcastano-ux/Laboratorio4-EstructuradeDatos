@@ -77,31 +77,34 @@ arbol.vecinos((5000, 5000), k=1)   # [(distancia_en_metros, punto)]
 
 - `graficas/rango_500m.png`: puntos dentro y fuera del radio de 500 m, con las celdas del árbol.
 - `graficas/vecinos_k5.png`: los 5 vecinos más cercanos a una consulta.
-- `graficas/rendimiento.png`: tiempo por consulta frente a N en escala log-log para range
-  search y vecino más cercano, comparando Quadtree y fuerza bruta.
+- `graficas/rendimiento.png`: tiempo por consulta frente a N en escala log-log, hasta N =
+  10.000, para range search y vecino más cercano, comparando Quadtree y fuerza bruta.
 - `graficas/construccion.png`: tiempo de construcción en milisegundos y consultas necesarias
-  para compensar la construcción, con N en escala lineal de 0 a 10.000.
+  para amortizar la construcción; N va de 0 a 10.000 en escala lineal y las consultas usan
+  escala logarítmica.
 
 ## Resultados
 
-Medidos en la computadora de desarrollo con N desde 10 hasta 100 000 puntos
-(100 consultas por tamaño, mejor de 3 repeticiones):
+Medidos en la computadora de desarrollo con N desde 10 hasta 100.000 puntos
+(100 consultas por tamaño, mejor de 3 repeticiones). La tabla muestra tamaños representativos;
+el archivo `resultados.csv` contiene todos los valores medidos:
 
-| N | Construir (s) | Rango QT (ms) | Rango BF (ms) | Vecino QT (ms) | Vecino BF (ms) |
+| N | Construcción (ms) | Rango QT (ms) | Rango BF (ms) | Vecino QT (ms) | Vecino BF (ms) |
 |---:|---:|---:|---:|---:|---:|
-| 100 | 0.0001 | 0.0026 | 0.0064 | 0.0055 | 0.0102 |
-| 1 000 | 0.0009 | 0.0065 | 0.0648 | 0.0090 | 0.0954 |
-| 10 000 | 0.0149 | 0.0353 | 0.7412 | 0.0145 | 1.1365 |
-| 100 000 | 0.2469 | 0.3019 | 7.5901 | 0.0159 | 10.6940 |
+| 10 | 0.069 | 0.0031 | 0.0022 | 0.0063 | 0.0078 |
+| 100 | 0.173 | 0.0068 | 0.0155 | 0.0130 | 0.0426 |
+| 1 000 | 3.081 | 0.0213 | 0.1779 | 0.0206 | 0.2716 |
+| 10 000 | 40.685 | 0.0948 | 1.8264 | 0.0303 | 2.8029 |
+| 100 000 | 645.500 | 0.9641 | 19.8506 | 0.0458 | 27.8479 |
 
-- **¿Desde qué tamaño el Quadtree es más rápido?** En range search, desde **N ≈ 25**. En vecino
-  más cercano, desde **N ≈ 50**. Por debajo de eso, la fuerza bruta gana porque el árbol tiene
-  más sobrecarga de llamadas y objetos.
-- **Costo de construcción.** Crece casi lineal (en loglog la pendiente es cercana a 1). Para
-  N = 100 000 construir tarda unos 0.25 s.
-- **Consultas necesarias para compensar la construcción.** Con N = 100 000 hacen falta unas
-  34 consultas de range search o unas 23 de vecino más cercano. Si el sistema hace muchas
-  más consultas que eso sobre los mismos datos, el árbol vale la pena.
+- **¿Desde qué tamaño el Quadtree es más rápido?** En esta corrida, desde **N ≈ 25** para range
+  search y **N ≈ 50** para vecino más cercano; son cruces aproximados que pueden variar entre
+  ejecuciones.
+- **Costo de construcción.** Para N = 10.000 construir tarda unos 40.7 ms y para N = 100.000,
+  unos 645.5 ms en esta computadora.
+- **Consultas para amortizar la construcción.** Con N = 100.000 hacen falta unas **34.2**
+  consultas de range search o **23.2** de vecino más cercano. Con N = 10.000 hacen falta unas
+  **23.5** y **14.7**, respectivamente.
 - Los tiempos cambian de una computadora a otra. Lo que se compara es la forma de las curvas
   y el punto de cruce.
 
