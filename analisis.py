@@ -128,7 +128,8 @@ def guardar_csv(filas, ruta):
 
 
 def graficar_rendimiento(filas, ruta):
-    ns = [f["n"] for f in filas]
+    filas_grafica = [f for f in filas if f["n"] <= 10000]
+    ns = [f["n"] for f in filas_grafica]
     fig, ejes = plt.subplots(1, 2, figsize=(14, 5.5))
 
     operaciones = (
@@ -136,16 +137,16 @@ def graficar_rendimiento(filas, ruta):
         ("vecino_qt_s", "vecino_bf_s", "Vecino más cercano (k = 1)"),
     )
     for ax, (tiempo_qt, tiempo_bf, titulo) in zip(ejes, operaciones):
-        ax.loglog(ns, [1000 * f[tiempo_qt] for f in filas], "o-", label="Quadtree")
-        ax.loglog(ns, [1000 * f[tiempo_bf] for f in filas], "s-", label="Fuerza bruta")
-        ax.set_xlim(min(ns), max(ns))
+        ax.loglog(ns, [1000 * f[tiempo_qt] for f in filas_grafica], "o-", label="Quadtree")
+        ax.loglog(ns, [1000 * f[tiempo_bf] for f in filas_grafica], "s-", label="Fuerza bruta")
+        ax.set_xlim(min(ns), 10000)
         ax.set_title(titulo)
         ax.set_xlabel("Número de puntos N")
         ax.set_ylabel("Tiempo por consulta (ms)")
         ax.grid(True, which="both", alpha=0.3)
         ax.legend()
 
-    fig.suptitle("Tiempo por consulta frente al número de puntos")
+    fig.suptitle("Tiempo por consulta frente al número de puntos (N hasta 10.000)")
     fig.tight_layout()
     fig.savefig(ruta, dpi=150)
     plt.close(fig)
